@@ -1,0 +1,128 @@
+import org.apache.http.HttpHost;
+import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
+import org.elasticsearch.action.delete.DeleteRequest;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.xcontent.XContentType;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Map;
+
+
+
+public class HashAgilesecond {
+	 private static RestHighLevelClient client;
+
+	    public static void main(String[] args) throws IOException {
+	        client = new RestHighLevelClient(RestClient.builder(new HttpHost("localhost", 9200, "http")));
+
+	        String vNameCollection = "Hash_YourName";
+	        String vPhoneCollection = "Hash_1234";
+
+	        createCollection(vNameCollection);
+	        createCollection(vPhoneCollection);
+
+	        getEmpCount(vNameCollection);
+
+	        indexData(vNameCollection, "Department");
+	        indexData(vPhoneCollection, "Gender");
+
+	        delEmpById(vNameCollection, "E02003");
+
+	        getEmpCount(vNameCollection);
+
+	        searchByColumn(vNameCollection, "Department", "IT");
+	        searchByColumn(vNameCollection, "Gender", "Male");
+	        searchByColumn(vPhoneCollection, "Department", "IT");
+
+	        getDepFacet(vNameCollection);
+	        getDepFacet(vPhoneCollection);
+
+	        client.close();
+	    }
+
+	    public static void createCollection(String collectionName) throws IOException {
+	        CreateIndexRequest request = new CreateIndexRequest(collectionName);
+	        client.indices().create(request, RequestOptions.DEFAULT);
+	        System.out.println("Collection created: " + collectionName);
+	    }
+
+	    public static void indexData(String collectionName, String excludeColumn) throws IOException {
+	        String filePath = "path/to/employee_dataset.csv"; // Update with your local path
+	        Files.lines(Paths.get(filePath)).skip(1).forEach(line -> {
+	            try {
+	                String[] fields = line.split(",");
+	                if (!fields[3].equalsIgnoreCase(excludeColumn)) {
+	                    IndexRequest request = new IndexRequest(collectionName);
+	                    request.source(Map.of(
+	                            "EmployeeID", fields[0],
+	                            "Name", fields[1],
+	                            "Age", fields[2],
+	                            "Department", fields[3],
+	                            "Gender", fields[4]
+	                    ), XContentType.JSON);
+	                    client.index(request, RequestOptions.DEFAULT);
+	                }
+	            } catch (IOException e) {
+	                e.printStackTrace();
+	            }
+	        });
+	        System.out.println("Data indexed in collection: " + collectionName);
+	    }
+
+	    public static void searchByColumn(String collectionName, String columnName, String columnValue) throws IOException {
+	        SearchRequest searchRequest = new SearchRequest(collectionName);
+	        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+	        searchSourceBuilder.query(QueryBuilders.matchQuery(columnName, columnValue));
+	        searchRequest.source(searchSourceBuilder);
+
+	        SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+	        for (SearchHit hit : searchResponse.getHits()) {
+	            System.out.println(hit.getSourceAsString());
+	        }
+	    }
+
+	    public static void getEmpCount(String collectionName) throws IOException {
+	        SearchRequest searchRequest = new SearchRequest(collectionName);
+	        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+	        searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+	        searchRequest.source(searchSourceBuilder);
+
+	        SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+	        System.out.println("Employee count in collection " + collectionName + ": " + searchResponse.getHits().getTotalHits().value);
+	    }
+
+	    public static void delEmpById(String collectionName, String employeeId) throws IOException {
+	        DeleteRequest request = new DeleteRequest(collectionName, employeeId);
+	        client.delete(request, RequestOptions.DEFAULT);
+	        System.out.println("Deleted employee with ID: " + employeeId);
+	    }
+
+	    public static void getDepFacet(String collectionName) throws IOException {
+	        SearchRequest searchRequest = new SearchRequest(collectionName);
+	        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+	        searchSourceBuilder.query(QueryBuilders.matchAllQuery());
+	        searchRequest.source(searchSourceBuilder);
+
+	        SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+	        Map<String, Long> departmentCount = new java.util.HashMap<>();
+	        for (SearchHit hit : searchResponse.getHits()) {
+	            String department = (String) hit.getSourceAsMap().get("Department");
+	            departmentCount.put(department, departmentCount.getOrDefault(department, 0L) + 1);
+	        }
+
+	        System.out.println("Department facet for collection " + collectionName + ": " + departmentCount);
+	    }
+	
+
+}
